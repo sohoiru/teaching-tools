@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>十位近似值四人对垒 - 趣味数学竞赛</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+
+        body {
+            background-color: #0f172a;
+            color: white;
+            font-family: 'ZCOOL KuaiLe', cursive;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 56.25vw; 
+            max-height: 100vh;
+            max-width: 177.78vh; 
+            background: #1e293b;
+            border: 4px solid #334155;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .player-box {
+            transition: all 0.3s ease;
+            position: relative;
+            border: 2px solid #334155;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .frozen {
+            filter: grayscale(1) brightness(0.3);
+            pointer-events: none;
+        }
+
+        .frozen::after {
+            content: "FREEZE!";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2rem;
+            color: #60a5fa;
+            text-shadow: 0 0 15px blue;
+            z-index: 10;
+        }
+
+        .slot-machine {
+            font-size: 4rem;
+            height: 100px;
+            overflow: hidden;
+            border: 4px solid #f59e0b;
+            background: #000;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .btn-answer {
+            background: #334155;
+            border-bottom: 4px solid #0f172a;
+            transition: all 0.1s;
+        }
+        .btn-answer:active {
+            transform: translateY(2px);
+            border-bottom-width: 2px;
+        }
+
+        .feedback-pop {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 1.5rem;
+            z-index: 100;
+            animation: popIn 0.5s forwards;
+        }
+
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        #timer-bar {
+            height: 10px;
+            background: #ef4444;
+            width: 100%;
+            transition: width 0.1s linear;
+        }
+
+        .custom-scroll::-webkit-scrollbar { width: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- 1. 顶部：题目区域 -->
+    <div id="question-area" class="h-1/3 bg-slate-900 flex flex-col items-center justify-center border-b-4 border-slate-700 relative">
+        <div id="round-info" class="absolute top-4 left-4 text-yellow-500 text-xl">准备开始</div>
+        <div id="timer-display" class="absolute top-4 right-4 text-white text-3xl font-mono bg-red-600 px-4 py-1 rounded-lg">10</div>
+        
+        <div id="question-content" class="text-center hidden">
+            <div class="text-2xl text-gray-400 mb-2">请写出以下数字的十位近似值</div>
+            <div id="target-number" class="text-7xl text-white font-bold tracking-widest">--</div>
+        </div>
+
+        <div id="idle-msg" class="text-3xl text-gray-500">等待选手就位...</div>
+    </div>
+
+    <div id="timer-bar-container" class="w-full bg-gray-800">
+        <div id="timer-bar"></div>
+    </div>
+
+    <!-- 2. 下部：学生对垒区域 (4个格子) -->
+    <div class="flex-grow grid grid-cols-4 gap-1 p-2">
+        <!-- 选手 A -->
+        <div id="player-0" class="player-box flex flex-col items-center p-4">
+            <div class="text-xl text-red-400 font-bold mb-2">选手 A</div>
+            <div id="name-0" class="text-2xl text-white mb-4">---</div>
+            <div id="score-0" class="text-lg text-yellow-500 mb-4">得分: 0</div>
+            <div id="options-0" class="grid grid-cols-2 gap-2 w-full mt-auto"></div>
+        </div>
+        <!-- 选手 B -->
+        <div id="player-1" class="player-box flex flex-col items-center p-4">
+            <div class="text-xl text-blue-400 font-bold mb-2">选手 B</div>
+            <div id="name-1" class="text-2xl text-white mb-4">---</div>
+            <div id="score-1" class="text-lg text-yellow-500 mb-4">得分: 0</div>
+            <div id="options-1" class="grid grid-cols-2 gap-2 w-full mt-auto"></div>
+        </div>
+        <!-- 选手 C -->
+        <div id="player-2" class="player-box flex flex-col items-center p-4">
+            <div class="text-xl text-green-400 font-bold mb-2">选手 C</div>
+            <div id="name-2" class="text-2xl text-white mb-4">---</div>
+            <div id="score-2" class="text-lg text-yellow-500 mb-4">得分: 0</div>
+            <div id="options-2" class="grid grid-cols-2 gap-2 w-full mt-auto"></div>
+        </div>
+        <!-- 选手 D -->
+        <div id="player-3" class="player-box flex flex-col items-center p-4">
+            <div class="text-xl text-purple-400 font-bold mb-2">选手 D</div>
+            <div id="name-3" class="text-2xl text-white mb-4">---</div>
+            <div id="score-3" class="text-lg text-yellow-500 mb-4">得分: 0</div>
+            <div id="options-3" class="grid grid-cols-2 gap-2 w-full mt-auto"></div>
+        </div>
+    </div>
+
+    <!-- 浮层系统 -->
+    <div id="overlay" class="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
+        <!-- 步骤 1: 初始化 -->
+        <div id="setup-screen" class="text-center bg-slate-800 p-8 rounded-3xl border-4 border-blue-500 max-w-2xl w-full mx-4">
+            <h1 class="text-5xl text-yellow-500 mb-6">四人对垒模式</h1>
+            <div class="mb-6">
+                <label class="block text-2xl mb-2 text-white">班级总人数:</label>
+                <input type="number" id="total-count-input" value="36" min="4" max="100" 
+                       class="bg-slate-700 text-white text-3xl px-4 py-2 rounded-xl border-2 border-slate-500 w-32 text-center outline-none">
+                <button onclick="generateAbsenceList()" class="ml-4 bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-xl text-xl">生成名单</button>
+            </div>
+            <div id="absence-section" class="hidden">
+                <div id="absence-grid" class="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto p-4 bg-slate-900 rounded-xl custom-scroll border border-slate-700"></div>
+                <button onclick="startGame()" class="mt-6 bg-yellow-600 px-12 py-4 rounded-full text-3xl text-white font-bold">进入游戏</button>
+            </div>
+        </div>
+
+        <!-- 步骤 2: 抽签 -->
+        <div id="draw-screen" class="hidden flex flex-col items-center w-full">
+            <h2 class="text-4xl text-white mb-8 tracking-widest">正在抽取本轮对垒选手</h2>
+            <div class="flex gap-4 mb-10 w-full justify-center px-4">
+                <div class="text-center w-1/5"><div class="text-red-400 mb-2">选手A</div><div id="slot-0" class="slot-machine">?</div></div>
+                <div class="text-center w-1/5"><div class="text-blue-400 mb-2">选手B</div><div id="slot-1" class="slot-machine">?</div></div>
+                <div class="text-center w-1/5"><div class="text-green-400 mb-2">选手C</div><div id="slot-2" class="slot-machine">?</div></div>
+                <div class="text-center w-1/5"><div class="text-purple-400 mb-2">选手D</div><div id="slot-3" class="slot-machine">?</div></div>
+            </div>
+            <div id="draw-msg" class="text-2xl text-yellow-400 mb-6"></div>
+            <button id="begin-round-btn" onclick="startRound()" class="bg-green-600 px-16 py-6 rounded-full text-4xl text-white hidden">全员就位，开始！</button>
+        </div>
+
+        <!-- 步骤 3: 结算 -->
+        <div id="summary-screen" class="hidden text-center bg-slate-800 p-10 rounded-2xl border-4 border-yellow-500">
+            <h2 class="text-5xl text-white mb-6">对垒结束!</h2>
+            <div id="winner-info" class="text-3xl text-yellow-400 mb-8 font-bold"></div>
+            <button onclick="drawPlayers()" class="bg-blue-600 px-12 py-4 rounded-full text-3xl text-white">下一轮抽签</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 基础音效系统
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playTone(freq, duration, type = 'sine', volume = 0.1) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+    }
+    const sounds = {
+        correct: () => { playTone(523,0.1); setTimeout(()=>playTone(659,0.1),100); },
+        wrong: () => { playTone(150,0.3,'sawtooth'); },
+        draw: () => playTone(300+Math.random()*200, 0.05),
+        finish: () => [440,554,659].forEach((f,i)=>setTimeout(()=>playTone(f,0.3),i*100))
+    };
+
+    let state = {
+        pool: [],
+        players: [null, null, null, null],
+        scores: [0, 0, 0, 0],
+        frozen: [false, false, false, false],
+        questionIndex: 0,
+        questionsPerRound: 5, // 改为5个题目
+        timeLeft: 10,
+        currentNum: 0,
+        currentAns: 0,
+        isAnswered: false,
+        timerInterval: null
+    };
+
+    function generateAbsenceList() {
+        const count = parseInt(document.getElementById('total-count-input').value);
+        const grid = document.getElementById('absence-grid');
+        grid.innerHTML = '';
+        for (let i = 1; i <= count; i++) {
+            const label = document.createElement('label');
+            label.className = "flex items-center justify-center p-2 bg-slate-700 rounded-lg cursor-pointer border-2 border-transparent has-[:checked]:border-red-500 has-[:checked]:bg-red-900/30";
+            label.innerHTML = `<input type="checkbox" value="${i}" class="hidden absence-check"><span>${i}</span>`;
+            grid.appendChild(label);
+        }
+        document.getElementById('absence-section').classList.remove('hidden');
+    }
+
+    function startGame() {
+        const count = parseInt(document.getElementById('total-count-input').value);
+        const absences = Array.from(document.querySelectorAll('.absence-check:checked')).map(cb => parseInt(cb.value));
+        state.pool = [];
+        for (let i = 1; i <= count; i++) {
+            if (!absences.includes(i)) state.pool.push(i);
+        }
+        if (state.pool.length < 4) { alert("剩余人数不足以进行四人对垒！"); return; }
+        document.getElementById('setup-screen').classList.add('hidden');
+        drawPlayers();
+    }
+
+    function drawPlayers() {
+        if (state.pool.length < 4) { alert("名单已空，游戏结束！"); return; }
+        
+        document.getElementById('overlay').classList.remove('hidden');
+        document.getElementById('draw-screen').classList.remove('hidden');
+        document.getElementById('summary-screen').classList.add('hidden');
+        document.getElementById('begin-round-btn').classList.add('hidden');
+        document.getElementById('draw-msg').innerText = "抽签开始...";
+
+        let start = Date.now();
+        const roll = setInterval(() => {
+            for(let i=0; i<4; i++) {
+                document.getElementById(`slot-${i}`).innerText = state.pool[Math.floor(Math.random()*state.pool.length)];
+                sounds.draw();
+            }
+            if (Date.now() - start > 1500) {
+                clearInterval(roll);
+                finalizeDraw();
+            }
+        }, 80);
+    }
+
+    function finalizeDraw() {
+        const tempPool = [...state.pool];
+        for(let i=0; i<4; i++) {
+            const idx = Math.floor(Math.random() * tempPool.length);
+            const selected = tempPool.splice(idx, 1)[0];
+            state.players[i] = selected;
+            // 真正从state.pool移除
+            state.pool.splice(state.pool.indexOf(selected), 1);
+            
+            document.getElementById(`slot-${i}`).innerText = selected;
+            document.getElementById(`name-${i}`).innerText = `学生 ${selected} 号`;
+            document.getElementById(`score-${i}`).innerText = "得分: 0";
+            state.scores[i] = 0;
+            state.frozen[i] = false;
+            document.getElementById(`player-${i}`).classList.remove('frozen');
+        }
+        document.getElementById('draw-msg').innerText = "请上述四位同学迅速就位！";
+        document.getElementById('begin-round-btn').classList.remove('hidden');
+        sounds.finish();
+    }
+
+    function startRound() {
+        state.questionIndex = 0;
+        document.getElementById('overlay').classList.add('hidden');
+        document.getElementById('idle-msg').classList.add('hidden');
+        document.getElementById('question-content').classList.remove('hidden');
+        nextQuestion();
+    }
+
+    function nextQuestion() {
+        if (state.questionIndex >= state.questionsPerRound) {
+            showSummary();
+            return;
+        }
+        state.isAnswered = false;
+        state.timeLeft = 10;
+        state.currentNum = Math.floor(Math.random() * 88) + 11;
+        while(state.currentNum % 10 === 0) state.currentNum++;
+        state.currentAns = Math.round(state.currentNum / 10) * 10;
+
+        document.getElementById('target-number').innerText = state.currentNum;
+        document.getElementById('round-info').innerText = `第 ${state.questionIndex+1} / ${state.questionsPerRound} 题`;
+        
+        const options = generateOptions(state.currentAns);
+        for(let i=0; i<4; i++) renderOptions(i, options);
+        startTimer();
+    }
+
+    function generateOptions(ans) {
+        let s = new Set([ans]);
+        while(s.size < 4) {
+            let w = Math.floor(Math.random()*11)*10;
+            if(w>=0 && w<=100) s.add(w);
+        }
+        return Array.from(s).sort(()=>Math.random()-0.5);
+    }
+
+    function renderOptions(pIdx, options) {
+        const box = document.getElementById(`options-${pIdx}`);
+        box.innerHTML = '';
+        options.forEach(val => {
+            const btn = document.createElement('button');
+            btn.className = "btn-answer text-white py-4 rounded-lg text-2xl font-bold";
+            btn.innerText = val;
+            btn.onclick = () => handleAnswer(pIdx, val);
+            box.appendChild(btn);
+        });
+    }
+
+    function handleAnswer(pIdx, val) {
+        if (state.isAnswered || state.frozen[pIdx]) return;
+
+        if (val === state.currentAns) {
+            state.isAnswered = true;
+            clearInterval(state.timerInterval);
+            sounds.correct();
+            
+            const bonus = Math.floor(state.timeLeft * 10);
+            state.scores[pIdx] += (100 + bonus);
+            document.getElementById(`score-${pIdx}`).innerText = `得分: ${state.scores[pIdx]}`;
+            
+            showFeedback(pIdx, "正确！", true);
+            confetti({ particleCount: 100, origin: { x: (pIdx+0.5)/4, y: 0.8 } });
+            
+            state.questionIndex++;
+            setTimeout(nextQuestion, 2000);
+        } else {
+            sounds.wrong();
+            showFeedback(pIdx, "错误！冷冻", false);
+            freezePlayer(pIdx);
+        }
+    }
+
+    function freezePlayer(pIdx) {
+        state.frozen[pIdx] = true;
+        document.getElementById(`player-${pIdx}`).classList.add('frozen');
+        setTimeout(() => {
+            state.frozen[pIdx] = false;
+            document.getElementById(`player-${pIdx}`).classList.remove('frozen');
+        }, 3000);
+    }
+
+    function showFeedback(pIdx, text, isOk) {
+        const parent = document.getElementById(`player-${pIdx}`);
+        const div = document.createElement('div');
+        div.className = `feedback-pop ${isOk?'bg-green-500':'bg-red-500'} text-white font-bold`;
+        div.innerText = text;
+        parent.appendChild(div);
+        setTimeout(()=>div.remove(), 1000);
+    }
+
+    function startTimer() {
+        clearInterval(state.timerInterval);
+        state.timerInterval = setInterval(() => {
+            state.timeLeft -= 0.1;
+            if (state.timeLeft <= 0) {
+                state.timeLeft = 0;
+                clearInterval(state.timerInterval);
+                state.isAnswered = true;
+                document.getElementById('target-number').innerHTML = "<span class='text-red-500'>时间到</span>";
+                state.questionIndex++;
+                setTimeout(nextQuestion, 2000);
+            }
+            document.getElementById('timer-display').innerText = Math.ceil(state.timeLeft);
+            document.getElementById('timer-bar').style.width = (state.timeLeft*10) + "%";
+        }, 100);
+    }
+
+    function showSummary() {
+        document.getElementById('overlay').classList.remove('hidden');
+        document.getElementById('draw-screen').classList.add('hidden');
+        document.getElementById('summary-screen').classList.remove('hidden');
+        
+        let max = Math.max(...state.scores);
+        // 处理平局：找出所有获得最高分的人
+        let winners = [];
+        state.scores.forEach((s, idx) => {
+            if (s === max && max > 0) winners.push({label: ["A", "B", "C", "D"][idx], num: state.players[idx]});
+        });
+
+        let msg = "无人得分";
+        if (winners.length > 0) {
+            msg = "本轮获胜：" + winners.map(w => `选手 ${w.label} (${w.num}号)`).join(", ");
+        }
+        
+        document.getElementById('winner-info').innerText = msg;
+        sounds.finish();
+        confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
+    }
+</script>
+</body>
+</html>

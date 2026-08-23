@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>几何图形对垒大赛</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1a202c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* 阻止默认触摸行为，优化游戏体验 */
+        }
+
+        #game-container {
+            position: relative;
+            background-color: #f7fafc;
+            /* 完美自适应 16:9 比例，避免任何按钮被遮挡 */
+            width: 100%;
+            height: 100%;
+            max-width: 177.78vh; /* 16/9 * 100 */
+            max-height: 56.25vw; /* 9/16 * 100 */
+            aspect-ratio: 16 / 9;
+            margin: auto;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+        }
+
+        .active-screen {
+            display: flex;
+        }
+
+        /* 游戏区域布局 (横向并排设计) */
+        #screen-game {
+            justify-content: flex-start; /* 改为顶部对齐 */
+        }
+
+        #play-area {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            width: 100%;
+            height: 65%; /* 占用下方65%的高度 */
+            padding: 1.5vw;
+            gap: 1.5vw;
+            z-index: 10;
+            box-sizing: border-box;
+        }
+
+        .player-zone {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 4% 2%;
+            border: 2px dashed rgba(255,255,255,0.3);
+            border-radius: 1.5vw;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .player-zone.frozen {
+            background-color: rgba(255, 0, 0, 0.2);
+            cursor: not-allowed;
+            pointer-events: none;
+            filter: grayscale(80%);
+        }
+
+        .player-zone.frozen::after {
+            content: "❄️ 冻结中!";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.8vw;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 5px blue;
+            z-index: 20;
+        }
+
+        .player-1 { background-color: rgba(239, 68, 68, 0.8); color: white; } /* 红 */
+        .player-2 { background-color: rgba(59, 130, 246, 0.8); color: white; } /* 蓝 */
+        .player-3 { background-color: rgba(16, 185, 129, 0.8); color: white; } /* 绿 */
+        .player-4 { background-color: rgba(245, 158, 11, 0.8); color: white; } /* 黄 */
+
+        .score-board {
+            font-size: 2.5vw;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            color: #fde047; /* 更醒目的黄色分数 */
+        }
+
+        .player-id-label {
+            font-size: 1.8vw;
+            font-weight: 800;
+            background: rgba(0,0,0,0.3);
+            padding: 5px 15px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        #top-stage {
+            width: 100%;
+            height: 35%;
+            background: white;
+            border-bottom-left-radius: 3vw;
+            border-bottom-right-radius: 3vw;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            z-index: 15;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            text-align: center;
+        }
+
+        #timer {
+            font-size: 4vw;
+            font-weight: bold;
+            color: #e53e3e;
+            position: absolute;
+            top: 1vw;
+            right: 2vw;
+        }
+
+        #question-text {
+            font-size: 3vw;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 1%;
+        }
+
+        #shape-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 50%;
+            position: relative;
+        }
+
+        .shape-btn {
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            position: relative;
+        }
+
+        /* 绘制大图形 (略微缩小以适应题目区) */
+        .shape-square { width: 8vw; height: 8vw; background-color: #8b5cf6; }
+        .shape-rectangle { width: 12vw; height: 6vw; background-color: #ec4899; }
+        .shape-circle { width: 8vw; height: 8vw; border-radius: 50%; background-color: #14b8a6; }
+        .shape-triangle { 
+            width: 0; height: 0; 
+            border-left: 5vw solid transparent; 
+            border-right: 5vw solid transparent; 
+            border-bottom: 8.6vw solid #f97316; 
+        }
+
+        /* 抽签动画样式 */
+        .slot-machine {
+            font-size: 6vw;
+            font-weight: bold;
+            color: #2d3748;
+            background: white;
+            padding: 2vw 3vw;
+            border-radius: 15px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+            min-width: 8vw;
+            text-align: center;
+            margin: 1vw;
+        }
+
+        /* 各种按钮 */
+        .btn-primary {
+            background-color: #4f46e5;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1.5vw;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+        }
+        .btn-primary:active { transform: translateY(2px); }
+        .btn-primary:disabled { background-color: #9ca3af; cursor: not-allowed; }
+
+        .input-field {
+            padding: 10px;
+            font-size: 1.5vw;
+            border-radius: 5px;
+            border: 1px solid #cbd5e0;
+            margin: 5px 0;
+            width: 80%;
+            text-align: center;
+        }
+
+        /* 玩家直接作答区样式 */
+        .direct-answer-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 1vw;
+            width: 100%;
+            flex-grow: 1;
+            margin-top: 1vw;
+        }
+        
+        .mini-shape-btn {
+            background: rgba(255,255,255,0.9);
+            border-radius: 1vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        .mini-shape-btn:active {
+            transform: scale(0.9);
+            background: #e2e8f0;
+        }
+        
+        /* 缩小图形比例适应新的纵列布局 */
+        .mini-square { width: 2.5vw; height: 2.5vw; background-color: #8b5cf6; }
+        .mini-rectangle { width: 3.5vw; height: 2vw; background-color: #ec4899; }
+        .mini-circle { width: 2.5vw; height: 2.5vw; border-radius: 50%; background-color: #14b8a6; }
+        .mini-triangle { 
+            width: 0; height: 0; 
+            border-left: 1.5vw solid transparent; 
+            border-right: 1.5vw solid transparent; 
+            border-bottom: 2.6vw solid #f97316; 
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="screen-setup" class="screen active-screen">
+            <h1 class="text-4xl md:text-6xl font-extrabold text-white mb-8 drop-shadow-lg">🎲 几何图形对垒赛 🎲</h1>
+            
+            <div class="bg-white/90 p-8 rounded-2xl shadow-xl w-3/4 md:w-1/2 flex flex-col items-center">
+                <label class="text-xl md:text-2xl font-bold mb-2 text-gray-700">班级总人数:</label>
+                <input type="number" id="input-total" class="input-field" value="38" min="4" max="100">
+                
+                <label class="text-xl md:text-2xl font-bold mt-6 mb-2 text-gray-700">缺席学生号码 (用逗号分隔，如: 5,12):</label>
+                <input type="text" id="input-absent" class="input-field" placeholder="例如: 5, 12, 30">
+                
+                <label class="text-xl md:text-2xl font-bold mt-6 mb-2 text-gray-700">每轮题目数量 (3题后换人):</label>
+                <input type="number" id="input-questions" class="input-field" value="3" min="1" max="10">
+                
+                <button class="btn-primary mt-8 w-full py-4 text-2xl" onclick="initGame()">确认设置，进入抽签</button>
+            </div>
+        </div>
+
+        <div id="screen-draw" class="screen">
+            <h2 class="text-3xl md:text-5xl font-bold text-white mb-4 drop-shadow-md">🎉 抽取本轮 4 位对垒选手 🎉</h2>
+            <div class="text-white text-xl mb-8">第 <span id="round-display">1</span> 轮</div>
+            
+            <div class="flex gap-2 md:gap-8 mb-8 justify-center items-center w-full px-2">
+                <div class="flex flex-col items-center">
+                    <span class="text-white font-bold mb-2 shadow-sm px-2 md:px-4 py-1 rounded bg-red-500 text-sm md:text-base">选手 1</span>
+                    <div class="slot-machine" id="slot-1">?</div>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-white font-bold mb-2 shadow-sm px-2 md:px-4 py-1 rounded bg-blue-500 text-sm md:text-base">选手 2</span>
+                    <div class="slot-machine" id="slot-2">?</div>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-white font-bold mb-2 shadow-sm px-2 md:px-4 py-1 rounded bg-green-500 text-sm md:text-base">选手 3</span>
+                    <div class="slot-machine" id="slot-3">?</div>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-white font-bold mb-2 shadow-sm px-2 md:px-4 py-1 rounded bg-yellow-500 text-sm md:text-base">选手 4</span>
+                    <div class="slot-machine" id="slot-4">?</div>
+                </div>
+            </div>
+
+            <button class="btn-primary py-3 px-8 text-2xl" id="btn-draw" onclick="startDrawing()">🎲 点击抽签</button>
+            <button class="btn-primary py-3 px-8 text-2xl bg-green-600 hidden" id="btn-start-round" onclick="startRound()">▶️ 学生就位，开始游戏</button>
+        </div>
+
+        <div id="screen-game" class="screen bg-gray-900">
+            <!-- 题目展示区放在上方 -->
+            <div id="top-stage">
+                <div class="absolute top-[1vw] left-[2vw] font-bold text-gray-500 text-[1.5vw]">第 <span id="game-round-num">1</span> 轮 / 题目 <span id="q-num">1</span>/5</div>
+                <div id="timer">10.0</div>
+                <div id="question-text">准备好...</div>
+                <div id="shape-container">
+                    <!-- 图形会在这里显示以供识别，或者文字提示找什么图形 -->
+                    <div id="display-shape"></div>
+                </div>
+                <div id="center-message" class="text-[2vw] font-bold text-red-600 hidden absolute bottom-[1vw]"></div>
+            </div>
+
+            <!-- 4个玩家的直接作答区域 (左到右并排) -->
+            <div id="play-area">
+                <div class="player-zone player-1" id="zone-1">
+                    <div class="w-full flex flex-col justify-center items-center gap-[0.5vw] mb-[1vw]">
+                        <div class="player-id-label">学号: <span id="p1-id"></span></div>
+                        <div class="score-board">分数: <span id="p1-score">0</span></div>
+                    </div>
+                    <div class="direct-answer-grid">
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(0, 'square')"><div class="mini-square"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(0, 'rectangle')"><div class="mini-rectangle"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(0, 'circle')"><div class="mini-circle"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(0, 'triangle')"><div class="mini-triangle"></div></div>
+                    </div>
+                </div>
+                <div class="player-zone player-2" id="zone-2">
+                    <div class="w-full flex flex-col justify-center items-center gap-[0.5vw] mb-[1vw]">
+                        <div class="player-id-label">学号: <span id="p2-id"></span></div>
+                        <div class="score-board">分数: <span id="p2-score">0</span></div>
+                    </div>
+                    <div class="direct-answer-grid">
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(1, 'square')"><div class="mini-square"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(1, 'rectangle')"><div class="mini-rectangle"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(1, 'circle')"><div class="mini-circle"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(1, 'triangle')"><div class="mini-triangle"></div></div>
+                    </div>
+                </div>
+                <div class="player-zone player-3" id="zone-3">
+                    <div class="w-full flex flex-col justify-center items-center gap-[0.5vw] mb-[1vw]">
+                        <div class="player-id-label">学号: <span id="p3-id"></span></div>
+                        <div class="score-board">分数: <span id="p3-score">0</span></div>
+                    </div>
+                    <div class="direct-answer-grid">
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(2, 'square')"><div class="mini-square"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(2, 'rectangle')"><div class="mini-rectangle"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(2, 'circle')"><div class="mini-circle"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(2, 'triangle')"><div class="mini-triangle"></div></div>
+                    </div>
+                </div>
+                <div class="player-zone player-4" id="zone-4">
+                    <div class="w-full flex flex-col justify-center items-center gap-[0.5vw] mb-[1vw]">
+                        <div class="player-id-label">学号: <span id="p4-id"></span></div>
+                        <div class="score-board">分数: <span id="p4-score">0</span></div>
+                    </div>
+                    <div class="direct-answer-grid">
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(3, 'square')"><div class="mini-square"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(3, 'rectangle')"><div class="mini-rectangle"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(3, 'circle')"><div class="mini-circle"></div></div>
+                        <div class="mini-shape-btn" onclick="submitDirectAnswer(3, 'triangle')"><div class="mini-triangle"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-result" class="screen">
+            <h1 class="text-5xl font-extrabold text-white mb-8 drop-shadow-lg">🏆 本轮结算 🏆</h1>
+            <div class="bg-white/90 p-8 rounded-2xl shadow-xl w-3/4 md:w-1/2 flex flex-col items-center">
+                <div id="final-scores" class="w-full mb-8 text-2xl font-bold text-gray-800 space-y-4">
+                    <!-- 成绩将在这里动态生成 -->
+                </div>
+                <button class="btn-primary py-3 px-8 text-2xl w-full" id="btn-next-round" onclick="prepareNextRound()">抽取下一组选手进入下一轮</button>
+                <div id="game-over-msg" class="text-2xl text-red-600 font-bold hidden mt-4">所有可用学生已完成游戏！</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 音频系统 (简单的合成音效) ---
+        let audioCtx;
+        
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(e => console.log("音频播放被浏览器拦截", e));
+            }
+        }
+
+        function playTone(freq, type, duration, vol=0.1) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume().catch(e=>{});
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const Sounds = {
+            tick: () => playTone(800, 'sine', 0.1, 0.05),
+            drawSlot: () => playTone(400 + Math.random()*200, 'square', 0.1, 0.05),
+            drawDing: () => playTone(880, 'sine', 0.5, 0.1),
+            buzz: () => playTone(300, 'sawtooth', 0.3, 0.1),
+            correct: () => { playTone(600, 'sine', 0.1); setTimeout(()=>playTone(800, 'sine', 0.3), 100); },
+            wrong: () => { playTone(300, 'sawtooth', 0.2); setTimeout(()=>playTone(200, 'sawtooth', 0.4), 200); },
+            freeze: () => playTone(150, 'square', 0.5),
+            confetti: () => { playTone(500, 'sine', 0.1); setTimeout(()=>playTone(700, 'sine', 0.1), 100); setTimeout(()=>playTone(900, 'sine', 0.4), 200); }
+        };
+
+        // --- 游戏状态变量 ---
+        let totalStudents = 38;
+        let availableStudents = []; // 可用的学号池
+        let currentPlayers = []; // 当前轮的4名玩家对象 {id: number, score: number, frozenUntil: timestamp}
+        let currentRound = 1;
+        let currentQuestionNum = 0;
+        let maxQuestionsPerRound = 5; // 每轮题目数，从设置读取
+
+        // 题目相关
+        let questionTimer = null;
+        let timeLeft = 10.0;
+        let currentTargetShape = ''; // 寻找什么形状
+        let currentDisplayedShape = ''; // 屏幕上显示了什么形状
+        let currentQuestionType = 0; // 0: 屏幕显示形状，选名字； 1: 屏幕出文字，选形状
+        
+        let isQuestionLive = false; // 是否允许作答
+
+        const shapes = ['square', 'rectangle', 'circle', 'triangle'];
+        const shapeNames = { 'square': '正方形', 'rectangle': '长方形', 'circle': '圆形', 'triangle': '三角形' };
+
+        // --- DOM 元素引用 ---
+        const screens = {
+            setup: document.getElementById('screen-setup'),
+            draw: document.getElementById('screen-draw'),
+            game: document.getElementById('screen-game'),
+            result: document.getElementById('screen-result')
+        };
+
+        function switchScreen(screenName) {
+            Object.values(screens).forEach(s => s.classList.remove('active-screen'));
+            screens[screenName].classList.add('active-screen');
+        }
+
+        // --- 初始化阶段 ---
+        function initGame() {
+            initAudio(); // 激活音频上下文，防止浏览器阻断
+            
+            totalStudents = parseInt(document.getElementById('input-total').value);
+            maxQuestionsPerRound = parseInt(document.getElementById('input-questions').value) || 5;
+            const absentInput = document.getElementById('input-absent').value;
+            
+            let absents = [];
+            if (absentInput.trim() !== '') {
+                absents = absentInput.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+            }
+
+            availableStudents = [];
+            for (let i = 1; i <= totalStudents; i++) {
+                if (!absents.includes(i)) {
+                    availableStudents.push(i);
+                }
+            }
+
+            if (availableStudents.length < 4) {
+                alert("可用学生人数不足4人，无法进行游戏！");
+                return;
+            }
+
+            currentRound = 1;
+            document.getElementById('round-display').innerText = currentRound;
+            switchScreen('draw');
+        }
+
+        // --- STREAMING_CHUNK: 抽签阶段 ---
+        function startDrawing() {
+            initAudio(); // 再次确认音频被激活
+            const btnDraw = document.getElementById('btn-draw');
+            btnDraw.disabled = true;
+            btnDraw.innerText = "抽取中...";
+
+            if (availableStudents.length < 4) {
+                alert("剩余学生不足4人，游戏结束！");
+                return;
+            }
+
+            // 从可用池中随机抽取4人
+            let drawnPool = [];
+            for(let i=0; i<4; i++) {
+                const randIndex = Math.floor(Math.random() * availableStudents.length);
+                drawnPool.push(availableStudents[randIndex]);
+                availableStudents.splice(randIndex, 1); // 移除已被选中的
+            }
+
+            currentPlayers = drawnPool.map(id => ({ id: id, score: 0, frozenUntil: 0 }));
+
+            // 动画效果
+            const slots = [
+                document.getElementById('slot-1'),
+                document.getElementById('slot-2'),
+                document.getElementById('slot-3'),
+                document.getElementById('slot-4')
+            ];
+
+            let animCount = 0;
+            const maxAnim = 20; // 动画帧数
+
+            const drawAnim = setInterval(() => {
+                Sounds.drawSlot();
+                slots.forEach(slot => {
+                    slot.innerText = Math.floor(Math.random() * totalStudents) + 1;
+                });
+                
+                animCount++;
+                if (animCount >= maxAnim) {
+                    clearInterval(drawAnim);
+                    // 揭晓结果
+                    slots.forEach((slot, index) => {
+                        setTimeout(() => {
+                            slot.innerText = currentPlayers[index].id;
+                            slot.style.backgroundColor = '#fef08a'; // 高亮
+                            Sounds.drawDing();
+                        }, index * 500); // 依次揭晓
+                    });
+
+                    setTimeout(() => {
+                        btnDraw.style.display = 'none';
+                        document.getElementById('btn-start-round').classList.remove('hidden');
+                    }, 4 * 500 + 500);
+                }
+            }, 100);
+        }
+
+        // --- STREAMING_CHUNK: 游戏循环逻辑 ---
+        function startRound() {
+            currentQuestionNum = 0;
+            // 更新UI
+            for(let i=0; i<4; i++) {
+                document.getElementById(`p${i+1}-id`).innerText = currentPlayers[i].id;
+                document.getElementById(`p${i+1}-score`).innerText = "0";
+                unfreezePlayer(i); // 重置冻结状态
+            }
+            document.getElementById('game-round-num').innerText = currentRound;
+            
+            switchScreen('game');
+            nextQuestion();
+        }
+
+        function nextQuestion() {
+            if (currentQuestionNum >= maxQuestionsPerRound) {
+                endRound();
+                return;
+            }
+            currentQuestionNum++;
+            document.getElementById('q-num').innerText = currentQuestionNum;
+            
+            // 重置状态
+            isQuestionLive = false;
+            document.getElementById('center-message').classList.add('hidden');
+            
+            // 解除所有因为下一题而应该解除的冻结 (虽然通常依赖时间，但这里确保UI正确)
+            updateFreezeUI();
+
+            // 生成题目
+            // 简单化设计：屏幕显示 "请找出: [文字]"
+            currentTargetShape = shapes[Math.floor(Math.random() * shapes.length)];
+            
+            document.getElementById('question-text').innerText = `请找出: ${shapeNames[currentTargetShape]}!`;
+            document.getElementById('display-shape').innerHTML = `<div style="font-size: 5vw; animation: pulse 1s infinite">❓</div>`;
+            
+            timeLeft = 10.0;
+            updateTimerDisplay();
+            
+            // 倒计时开始前给1秒准备
+            document.getElementById('timer').innerText = "准备!";
+            setTimeout(() => {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                isQuestionLive = true;
+                startTimer();
+            }, 1000);
+        }
+
+        function startTimer() {
+            clearInterval(questionTimer);
+            questionTimer = setInterval(() => {
+                if(!isQuestionLive) return; // 暂停计时
+                
+                timeLeft -= 0.1;
+                updateTimerDisplay();
+                
+                updateFreezeUI(); // 每0.1秒检查是否有玩家解冻
+
+                if (timeLeft <= 0) {
+                    clearInterval(questionTimer);
+                    isQuestionLive = false;
+                    handleTimeout();
+                } else if (Math.floor(timeLeft * 10) % 10 === 0 && timeLeft <= 3) {
+                    Sounds.tick(); // 最后3秒滴答声
+                }
+            }, 100);
+        }
+
+        function updateTimerDisplay() {
+            let t = Math.max(0, timeLeft).toFixed(1);
+            document.getElementById('timer').innerText = t;
+        }
+
+        function updateFreezeUI() {
+            const now = Date.now();
+            currentPlayers.forEach((p, idx) => {
+                const zone = document.getElementById(`zone-${idx+1}`);
+                if (p.frozenUntil > now) {
+                    if(!zone.classList.contains('frozen')) zone.classList.add('frozen');
+                } else {
+                    if(zone.classList.contains('frozen')) zone.classList.remove('frozen');
+                }
+            });
+        }
+
+        function freezePlayer(playerIndex) {
+            currentPlayers[playerIndex].frozenUntil = Date.now() + 3000; // 冻结3秒
+            updateFreezeUI();
+            Sounds.freeze();
+        }
+        
+        function unfreezePlayer(playerIndex) {
+            currentPlayers[playerIndex].frozenUntil = 0;
+            updateFreezeUI();
+        }
+
+        // --- STREAMING_CHUNK: 直接作答与判断 ---
+        function submitDirectAnswer(playerIndex, selectedShape) {
+            // 如果题目未开始、已结束，或玩家被冻结，则无效
+            if (!isQuestionLive || timeLeft <= 0 || currentPlayers[playerIndex].frozenUntil > Date.now()) return;
+
+            const msgEl = document.getElementById('center-message');
+            msgEl.classList.remove('hidden');
+
+            if (selectedShape === currentTargetShape) {
+                // 有人答对了，结束本题
+                isQuestionLive = false;
+                
+                // 根据剩余时间给分 (最高100分，最低10分)
+                let scoreEarned = Math.floor(timeLeft * 10);
+                if(scoreEarned < 10) scoreEarned = 10;
+                
+                currentPlayers[playerIndex].score += scoreEarned;
+                document.getElementById(`p${playerIndex+1}-score`).innerText = currentPlayers[playerIndex].score;
+                
+                Sounds.correct();
+                const pColors = ['红', '蓝', '绿', '黄'];
+                msgEl.innerText = `${pColors[playerIndex]}方 学号 ${currentPlayers[playerIndex].id} 答对了! +${scoreEarned}分`;
+                msgEl.style.color = 'green';
+                
+                // 在中心显示正确图形
+                const div = document.createElement('div');
+                div.className = `shape-${currentTargetShape}`;
+                document.getElementById('display-shape').innerHTML = '';
+                document.getElementById('display-shape').appendChild(div);
+
+                clearInterval(questionTimer);
+                setTimeout(nextQuestion, 2000); // 2秒后下一题
+            } else {
+                // 答错，仅冻结该玩家，其他人可以继续抢答
+                Sounds.wrong();
+                const pColors = ['红', '蓝', '绿', '黄'];
+                msgEl.innerText = `${pColors[playerIndex]}方 答错了! 冻结3秒`;
+                msgEl.style.color = 'red';
+                
+                freezePlayer(playerIndex);
+                
+                // 延迟一下隐藏错误提示，以免阻碍其他人作答的正确提示
+                setTimeout(() => {
+                    if (isQuestionLive) {
+                        msgEl.classList.add('hidden');
+                    }
+                }, 1500);
+            }
+        }
+
+        function handleTimeout() {
+            const msgEl = document.getElementById('center-message');
+            msgEl.classList.remove('hidden');
+            msgEl.innerText = "时间到！无人得分。";
+            msgEl.style.color = 'gray';
+            Sounds.wrong();
+            setTimeout(nextQuestion, 2000);
+        }
+
+        // --- STREAMING_CHUNK: 结算与下一轮 ---
+        function endRound() {
+            clearInterval(questionTimer);
+            switchScreen('result');
+            Sounds.confetti();
+            triggerConfetti();
+
+            const resultContainer = document.getElementById('final-scores');
+            resultContainer.innerHTML = '';
+            
+            // 排序成绩
+            const sortedPlayers = [...currentPlayers].sort((a,b) => b.score - a.score);
+            const medals = ['🥇', '🥈', '🥉', '👏'];
+
+            sortedPlayers.forEach((p, index) => {
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center p-4 bg-gray-100 rounded-lg';
+                row.innerHTML = `
+                    <div class="text-3xl">${medals[index]} 学号 ${p.id}</div>
+                    <div class="text-3xl text-blue-600">${p.score} 分</div>
+                `;
+                resultContainer.appendChild(row);
+            });
+
+            if (availableStudents.length < 4) {
+                document.getElementById('btn-next-round').classList.add('hidden');
+                document.getElementById('game-over-msg').classList.remove('hidden');
+            }
+        }
+
+        function prepareNextRound() {
+            currentRound++;
+            document.getElementById('round-display').innerText = currentRound;
+            
+            // 重置抽签界面UI
+            const slots = ['slot-1', 'slot-2', 'slot-3', 'slot-4'];
+            slots.forEach(id => {
+                const el = document.getElementById(id);
+                el.innerText = '?';
+                el.style.backgroundColor = 'white';
+            });
+            
+            const btnDraw = document.getElementById('btn-draw');
+            btnDraw.style.display = 'block';
+            btnDraw.disabled = false;
+            btnDraw.innerText = "🎲 点击抽签";
+            document.getElementById('btn-start-round').classList.add('hidden');
+
+            switchScreen('draw');
+        }
+
+        // 烟花特效
+        function triggerConfetti() {
+            var duration = 3 * 1000;
+            var animationEnd = Date.now() + duration;
+            var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100 };
+
+            function randomInRange(min, max) {
+                return Math.random() * (max - min) + min;
+            }
+
+            var interval = setInterval(function() {
+                var timeLeft = animationEnd - Date.now();
+
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+
+                var particleCount = 50 * (timeLeft / duration);
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+            }, 250);
+        }
+
+        // 添加简单的脉冲动画CSS
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.2); }
+                100% { transform: scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+
+    </script>
+</body>
+</html>
